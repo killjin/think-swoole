@@ -65,7 +65,7 @@ trait InteractsWithWebsocket
                     $res->close();
                     return;
                 }
-                $event->subscribe($response);
+                $event->subscribe([$response]);
             } else {
                 $request = $this->setRequestThroughMiddleware($app, $request);
             }
