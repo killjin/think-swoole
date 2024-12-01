@@ -57,11 +57,6 @@ trait InteractsWithWebsocket
         $this->runInSandbox(function (App $app, Http $http, Event $event) use ($req, $res) {
             $request = $this->prepareRequest($req);
 
-            //自动处理Sec-WebSocket-Protocol
-            if ($protocol = $request->header('sec-websocket-protocol')) {
-                $res->header('sec-websocket-protocol', $protocol);
-            }
-
             //路由调度
             $useRoute = $this->getConfig('websocket.route', false);
             if ($useRoute) {
@@ -73,6 +68,11 @@ trait InteractsWithWebsocket
                 $event->subscribe([$response]);
             } else {
                 $request = $this->setRequestThroughMiddleware($app, $request);
+            }
+
+            //自动处理Sec-WebSocket-Protocol
+            if ($protocol = $request->header('sec-websocket-protocol')) {
+                $res->header('sec-websocket-protocol', $protocol);
             }
 
             $res->upgrade();

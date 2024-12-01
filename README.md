@@ -86,8 +86,8 @@ swoole.websocket.route = true 时开启
 
 #### 路由定义
 ```php
-Route::get('path','controller/action1');
-Route::get('path','controller/action2');
+Route::get('path1','controller/action1');
+Route::get('path2','controller/action2');
 ```
 
 #### 控制器
@@ -95,6 +95,7 @@ Route::get('path','controller/action2');
 ```php
 use \think\swoole\Websocket;
 use \think\swoole\websocket\Event;
+use \Swoole\WebSocket\Frame;
 
 class Controller {
 
@@ -102,7 +103,7 @@ class Controller {
     
         return \think\swoole\helper\websocket()
             ->onOpen(...)
-            ->onEvent(function(Websocket $websocket, Event $event){ //只可在事件响应这里注入websocket对象
+            ->onMessage(function(Websocket $websocket, Frame $frame){ //只可在事件响应这里注入websocket对象
                 ...
             })
             ->onClose(...);
@@ -112,7 +113,7 @@ class Controller {
     
         return \think\swoole\helper\websocket()
             ->onOpen(...)
-            ->onEvent(function(Websocket $websocket, Event $event){
+            ->onMessage(function(Websocket $websocket, Frame $frame){
                ...
             })
             ->onClose(...);
