@@ -11,13 +11,13 @@
     "require": {
         "php": "^8.0",
         "ext-json": "*",
-        "ext-swoole": ">=4.6",
+        "ext-swoole": "^5.0",
         "nette/php-generator": "^4.0",
         "open-smf/connection-pool": ">=1.0",
         "stechstudio/backoff": "^1.2",
         "symfony/finder": ">=4.3",
         "topthink/framework": "^6.0|^8.0",
-        "swoole/ide-helper": "^4.3"
+        "swoole/ide-helper": "^5.0"
     },
     "require-dev": {
         "topthink/think-tracing": "^1.0",
@@ -52,7 +52,7 @@
         "sort-packages": true,
         "platform-check": false,
         "platform": {
-            "ext-swoole": "4.6.1",
+            "ext-swoole": "5.0.0",
             "ext-fileinfo": "1.0.4"
         }
     }

@@ -15,9 +15,9 @@ use think\helper\Str;
 use think\Http;
 use think\swoole\contract\websocket\HandlerInterface;
 use think\swoole\contract\websocket\RoomInterface;
+use think\swoole\message\PushMessage;
 use think\swoole\Middleware;
 use think\swoole\Websocket;
-use think\swoole\websocket\message\PushMessage;
 use think\swoole\websocket\Room;
 use Throwable;
 

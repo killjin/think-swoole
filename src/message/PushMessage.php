@@ -1,6 +1,6 @@
 <?php
 
-namespace think\swoole\websocket\message;
+namespace think\swoole\message;
 
 class PushMessage
 {

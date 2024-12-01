@@ -4,12 +4,12 @@ namespace think\swoole\concerns;
 
 use Swoole\Constant;
 use Swoole\Coroutine;
-use Swoole\Process;
 use Swoole\Process\Pool;
 use Swoole\Runtime;
 use think\App;
 use think\swoole\coroutine\Barrier;
 use think\swoole\Ipc;
+use think\swoole\message\ReloadMessage;
 use think\swoole\Watcher;
 
 /**
@@ -68,10 +68,7 @@ trait InteractsWithServer
 
         $workerNum = count($this->startFuncMap);
 
-        //启动消息监听
-        $this->prepareIpc($workerNum);
-
-        $pool = new Pool($workerNum, $this->ipc->getType(), 0, true);
+        $pool = $this->createPool($workerNum);
 
         $pool->on(Constant::EVENT_WORKER_START, function ($pool, $workerId) use ($envName) {
 
@@ -86,8 +83,10 @@ trait InteractsWithServer
                 $this->setProcessName($name);
             }
 
-            Process::signal(SIGTERM, function () {
-                $this->pool->getProcess()->exit();
+            $this->onEvent('message', function ($message) {
+                if ($message instanceof ReloadMessage) {
+                    $this->pool->getProcess()->exit();
+                }
             });
 
             $this->clearCache();
@@ -122,10 +121,15 @@ trait InteractsWithServer
         $this->ipc->sendMessage($workerId, $message);
     }
 
-    protected function prepareIpc($workerNum)
+    protected function createPool($workerNum)
     {
         $this->ipc = $this->container->make(Ipc::class);
-        $this->ipc->prepare($workerNum);
+
+        $pool = new Pool($workerNum, $this->ipc->getType(), 0, true);
+
+        $this->ipc->prepare($pool);
+
+        return $pool;
     }
 
     public function runWithBarrier(callable $func, ...$params)
@@ -143,11 +147,14 @@ trait InteractsWithServer
             'enable_deadlock_check' => false,
         ]);
 
-        $this->addWorker(function (Process\Pool $pool) {
+        $this->addWorker(function () {
             $watcher = $this->container->make(Watcher::class);
-
-            $watcher->watch(function () use ($pool) {
-                Process::kill($pool->master_pid, SIGUSR1);
+            $watcher->watch(function () {
+                foreach ($this->startFuncMap as $workerId => $func) {
+                    if ($workerId != $this->workerId) {
+                        $this->sendMessage($workerId, new ReloadMessage);
+                    }
+                }
             });
         }, 'hot update');
     }

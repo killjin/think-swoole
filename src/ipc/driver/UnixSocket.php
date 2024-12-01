@@ -2,7 +2,8 @@
 
 namespace think\swoole\ipc\driver;
 
-use Swoole\Event;
+use Swoole\Constant;
+use Swoole\Process\Pool;
 use think\swoole\ipc\Driver;
 
 class UnixSocket extends Driver
@@ -12,32 +13,23 @@ class UnixSocket extends Driver
         return SWOOLE_IPC_UNIXSOCK;
     }
 
-    public function prepare($workerNum)
+    public function prepare(Pool $pool)
     {
-
-    }
-
-    public function subscribe()
-    {
-        $socket = $this->getSocket($this->workerId);
-        Event::add($socket, function (\Swoole\Coroutine\Socket $socket) {
-            $message = unserialize($socket->recv());
+        $pool->set(['enable_message_bus' => true]);
+        $pool->on(Constant::EVENT_MESSAGE, function (Pool $pool, string $data) {
+            $message = unserialize($data);
             $this->manager->triggerEvent('message', $message);
         });
     }
 
-    public function publish($workerId, $message)
+    public function subscribe()
     {
-        $socket = $this->getSocket($workerId);
-        $socket->send(serialize($message));
+
     }
 
-    /**
-     * @param $workerId
-     * @return \Swoole\Coroutine\Socket
-     */
-    protected function getSocket($workerId)
+    public function publish($workerId, $message)
     {
-        return $this->manager->getPool()->getProcess($workerId)->exportSocket();
+        $this->manager->getPool()->sendMessage(serialize($message), $workerId);
     }
+
 }
