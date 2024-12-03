@@ -4,6 +4,7 @@ namespace think\swoole\concerns;
 
 use Swoole\Constant;
 use Swoole\Coroutine;
+use Swoole\Process;
 use Swoole\Process\Pool;
 use Swoole\Runtime;
 use think\App;
@@ -83,16 +84,20 @@ trait InteractsWithServer
                 $this->setProcessName($name);
             }
 
+            $this->ipc->listenMessage($workerId);
+
+            Process::signal(SIGTERM, function () {
+                $this->stopWorker();
+            });
+
             $this->onEvent('message', function ($message) {
                 if ($message instanceof ReloadMessage) {
-                    $this->pool->getProcess()->exit();
+                    $this->stopWorker();
                 }
             });
 
             $this->clearCache();
             $this->prepareApplication($envName);
-
-            $this->ipc->listenMessage($workerId);
 
             $this->triggerEvent(Constant::EVENT_WORKER_START);
 
@@ -100,6 +105,12 @@ trait InteractsWithServer
         });
 
         $pool->start();
+    }
+
+    protected function stopWorker()
+    {
+        $this->triggerEvent('beforeWorkerStop');
+        $this->pool->getProcess()->exit();
     }
 
     public function getWorkerId()
