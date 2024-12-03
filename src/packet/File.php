@@ -1,6 +1,6 @@
 <?php
 
-namespace think\swoole\rpc\packer;
+namespace think\swoole\packet;
 
 class File
 {

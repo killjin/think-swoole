@@ -2,13 +2,20 @@
 
 namespace think\swoole\ipc\driver;
 
-use Swoole\Coroutine\Socket;
-use Swoole\Event;
+use RuntimeException;
+use Swoole\Coroutine;
 use Swoole\Process\Pool;
+use think\swoole\coroutine\Barrier;
 use think\swoole\ipc\Driver;
+use think\swoole\packet\Buffer;
+use Throwable;
 
 class UnixSocket extends Driver
 {
+    public const HEADER_SIZE   = 4;
+    public const HEADER_STRUCT = 'Nlength';
+    public const HEADER_PACK   = 'N';
+
     public function getType()
     {
         return SWOOLE_IPC_UNIXSOCK;
@@ -21,17 +28,73 @@ class UnixSocket extends Driver
 
     public function subscribe()
     {
-        $socket = $this->getSocket($this->workerId);
-        Event::add($socket, function (Socket $socket) {
-            $message = unserialize($socket->recv());
-            $this->manager->triggerEvent('message', $message);
+        Coroutine::create(function () {
+            $socket = $this->getSocket($this->workerId);
+            $packet = null;
+            while ($data = $socket->recv()) {
+                try {
+                    begin:
+                    if (empty($packet)) {
+                        [$packet, $data] = $this->unpack($data);
+                    }
+
+                    $response = $packet->write($data);
+
+                    if (!empty($response)) {
+                        $packet  = null;
+                        $message = unserialize($response);
+                        $this->manager->triggerEvent('message', $message);
+                    }
+
+                    if (!empty($data)) {
+                        goto begin;
+                    }
+                } catch (Throwable) {
+                    $packet = null;
+                }
+            }
         });
     }
 
     public function publish($workerId, $message)
     {
-        $socket = $this->getSocket($workerId);
-        $socket->send(serialize($message));
+        Barrier::run(function () use ($workerId, $message) {
+            $socket = $this->getSocket($workerId);
+            $data   = $this->pack(serialize($message));
+
+            $dataSize  = strlen($data);
+            $chunkSize = 1024 * 64;//每次最多发送64K数据
+
+            $sendSize = 0;
+            do {
+                if (!$socket->send(substr($data, $sendSize, $chunkSize))) {
+                    break;
+                }
+            } while (($sendSize += $chunkSize) < $dataSize);
+        });
+    }
+
+    /**
+     * @param $data
+     * @return array<Buffer|string>
+     */
+    protected function unpack($data)
+    {
+        $header = unpack(self::HEADER_STRUCT, substr($data, 0, self::HEADER_SIZE));
+
+        if ($header === false) {
+            throw new RuntimeException('Invalid Header');
+        }
+
+        $packet = new Buffer($header['length']);
+        $data   = substr($data, self::HEADER_SIZE);
+
+        return [$packet, $data];
+    }
+
+    protected function pack($data)
+    {
+        return pack(self::HEADER_PACK, strlen($data)) . $data;
     }
 
     /**
