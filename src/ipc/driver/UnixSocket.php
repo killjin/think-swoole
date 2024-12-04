@@ -2,8 +2,8 @@
 
 namespace think\swoole\ipc\driver;
 
-use RuntimeException;
 use Swoole\Coroutine;
+use Swoole\Event;
 use Swoole\Process\Pool;
 use think\swoole\coroutine\Barrier;
 use think\swoole\ipc\Driver;
@@ -12,9 +12,12 @@ use Throwable;
 
 class UnixSocket extends Driver
 {
-    public const HEADER_SIZE   = 4;
-    public const HEADER_STRUCT = 'Nlength';
-    public const HEADER_PACK   = 'N';
+    public const HEADER_SIZE   = 8;
+    public const HEADER_STRUCT = 'Nworker/Nlength';
+    public const HEADER_PACK   = 'NN';
+
+    /** @var Buffer[] */
+    protected $packets = [];
 
     public function getType()
     {
@@ -28,29 +31,31 @@ class UnixSocket extends Driver
 
     public function subscribe()
     {
-        Coroutine::create(function () {
-            $socket = $this->getSocket($this->workerId);
-            $packet = null;
-            while ($data = $socket->recv()) {
-                try {
-                    begin:
-                    if (empty($packet)) {
-                        [$packet, $data] = $this->unpack($data);
-                    }
-
+        Event::add($this->getSocket($this->workerId), function (Coroutine\Socket $socket) {
+            $data   = $socket->recv();
+            $length = strlen($data);
+            if ($length == self::HEADER_SIZE) {
+                $header = unpack(self::HEADER_STRUCT, $data);
+                if ($header) {
+                    $this->packets[$header['worker']] = new Buffer($header['length']);
+                }
+            } elseif ($length > self::HEADER_SIZE) {
+                $header = unpack(self::HEADER_STRUCT, substr($data, 0, self::HEADER_SIZE));
+                if ($header && !empty($this->packets[$header['worker']])) {
+                    $packet = $this->packets[$header['worker']];
+                    $data   = substr($data, self::HEADER_SIZE);
                     $response = $packet->write($data);
-
-                    if (!empty($response)) {
-                        $packet  = null;
-                        $message = unserialize($response);
-                        $this->manager->triggerEvent('message', $message);
+                    if ($response) {
+                        unset($this->packets[$header['worker']]);
+                        Coroutine::create(function () use ($response) {
+                            try {
+                                $message = unserialize($response);
+                                $this->manager->triggerEvent('message', $message);
+                            } catch (Throwable $e) {
+                                $this->manager->logServerError($e);
+                            }
+                        });
                     }
-
-                    if (!empty($data)) {
-                        goto begin;
-                    }
-                } catch (Throwable) {
-                    $packet = null;
                 }
             }
         });
@@ -60,41 +65,25 @@ class UnixSocket extends Driver
     {
         Barrier::run(function () use ($workerId, $message) {
             $socket = $this->getSocket($workerId);
-            $data   = $this->pack(serialize($message));
+
+            $data = serialize($message);
+
+            $header    = pack(self::HEADER_PACK, $workerId, strlen($data));
+
+            if (!$socket->send($header)) {
+                return;
+            }
 
             $dataSize  = strlen($data);
-            $chunkSize = 1024 * 64;//每次最多发送64K数据
+            $chunkSize = 1024 * 32;
+            $sendSize  = 0;
 
-            $sendSize = 0;
             do {
-                if (!$socket->send(substr($data, $sendSize, $chunkSize))) {
+                if (!$socket->send($header . substr($data, $sendSize, $chunkSize))) {
                     break;
                 }
             } while (($sendSize += $chunkSize) < $dataSize);
         });
-    }
-
-    /**
-     * @param $data
-     * @return array<Buffer|string>
-     */
-    protected function unpack($data)
-    {
-        $header = unpack(self::HEADER_STRUCT, substr($data, 0, self::HEADER_SIZE));
-
-        if ($header === false) {
-            throw new RuntimeException('Invalid Header');
-        }
-
-        $packet = new Buffer($header['length']);
-        $data   = substr($data, self::HEADER_SIZE);
-
-        return [$packet, $data];
-    }
-
-    protected function pack($data)
-    {
-        return pack(self::HEADER_PACK, strlen($data)) . $data;
     }
 
     /**
