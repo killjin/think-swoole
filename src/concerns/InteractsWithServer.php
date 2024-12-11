@@ -99,7 +99,7 @@ trait InteractsWithServer
             $this->clearCache();
             $this->prepareApplication($envName);
 
-            $this->triggerEvent(Constant::EVENT_WORKER_START);
+            $this->triggerEvent(Constant::EVENT_WORKER_START, $name);
 
             $func($pool, $workerId);
         });

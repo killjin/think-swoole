@@ -68,7 +68,7 @@ class UnixSocket extends Driver
 
             $data = serialize($message);
 
-            $header    = pack(self::HEADER_PACK, $workerId, strlen($data));
+            $header = pack(self::HEADER_PACK, $workerId, strlen($data));
 
             if (!$socket->send($header)) {
                 return;
