@@ -81,10 +81,10 @@ class Application extends App
                 ->withCookie($_COOKIE)
                 ->withInput($request->rawContent())
                 ->withFiles($_FILES)
-                ->setBaseUrl($request->server['request_uri'])
-                ->setUrl($request->server['request_uri'] . (!empty($request->server['query_string']) ? '&' . $request->server['query_string'] : ''))
-                ->setHost($request->header['host'])
-                ->setPathinfo(ltrim($request->server['path_info'], '/'));
+                ->setBaseUrl($server['request_uri'])
+                ->setUrl($server['request_uri'] . (!empty($server['query_string']) ? '&' . $server['query_string'] : ''))
+                ->setHost($header['host'])
+                ->setPathinfo(ltrim($server['path_info'], '/'));
 
             // 更新请求对象实例
             $this->route->setRequest($this->request);
