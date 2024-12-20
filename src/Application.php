@@ -71,6 +71,11 @@ class Application extends App
                 $server['path_info'] = $_GET[$this->config->get('var_pathinfo')];
             }
 
+            // Nginx兼容: proxy_set_header SERVER_PORT $server_port;
+            if(isset($header['server_port'])) {
+                $server['server_port'] = $header['server_port'];
+            }
+
             $_SERVER = array_change_key_case($server, CASE_UPPER);
 
             // 重新实例化请求对象 处理swoole请求数据
